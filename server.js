@@ -1,66 +1,59 @@
 const dbSetup = require("./db/db-setup");
-const express = require("express");
 const Note = require("./model/note");
+const { ApolloServer, gql } = require("apollo-server");
+const typeDefs = gql`
+  # Comments in GraphQL strings (such as this one) start with the hash (#) symbol.
+
+  # This "Note" type defines the queryable fields for every book in our data source.
+  type Note {
+    id: ID
+    title: String
+    content: String
+    created_at: String
+    updated_at: String
+  }
+
+  # The "Query" type is special: it lists all of the available queries that
+  # clients can execute, along with the return type for each. In this
+  # case, the "books" query returns an array of zero or more Books (defined above).
+  type Query {
+    notes: [Note]
+    note(id: ID): Note
+  }
+  type Mutation {
+    addNote(title: String, content: String): Note
+    updateNote(id:ID ,title: String, content: String): Note
+    deleteNote(id:ID): Note
+  }
+`;
 
 dbSetup();
 
-const port = 3000;
-const app = express();
-app.use(express.json());
-
-//
-app.get("/api/notes", async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const notes = await Note.query();
-    res.json(notes);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json(err);
+const resolvers = {
+  Query: {
+    notes: async () => {
+      return Note.query();
+    },
+    note: async (parent, args, context, info) => {
+      const note = Note.query().findById(args.id);
+      return note;
+    },
+  },
+  Mutation: {
+    addNote: async (parent, note) => {
+      return Note.query().insert(note);
+    },
+    updateNote: async (parent, note) => {
+      return Note.query().patchAndFetchById(note.id,note);
+    },
+    deleteNote: async(parent, note) => {
+      return Note.query().deleteById(note.id);
+    }
   }
-});
+};
 
-app.get("/api/notes/:id", async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const note = await Note.query().findById(id);
-    res.json(note);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json(err);
-  }
-});
+const server = new ApolloServer({ typeDefs, resolvers });
 
-app.post("/api/notes", async (req, res, next) => {
-  try {
-    const note = await Note.query().insert(req.body);
-    res.json(note);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json(err);
-  }
-});
-
-app.put("/api/notes", async (req, res, next) => {
-  try {
-    const note = await Note.query().patchAndFetchById(req.body.id, req.body);
-    res.json(note);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json(err);
-  }
-});
-
-app.delete("/api/notes", async (req, res, next) => {
-  try {
-    const note = await Note.query().deleteById(req.body.id);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json(err);
-  }
-});
-//
-
-app.listen(port, () => {
-  console.log(`App running on port ${port}.`);
+server.listen().then(({ url }) => {
+  console.log(`🚀  Server ready at ${url}`);
 });
